@@ -6,8 +6,43 @@ use Exception;
 
 class Importer
 {
+    /** @var array uploaders */
+    protected $uploaders = [
+        \Pro\Uploader\Web::class,
+        \Pro\Uploader\Path::class
+    ];
+
     /** @var string file path of uploaded sitemap */
     protected $filePath = '';
+
+    /**
+     * Prepare uploaders map
+     */
+    public function __construct()
+    {
+        if (empty($this->uploaders)) {
+            return;
+        }
+
+        $objectsMap = [];
+
+        foreach ($this->uploaders as $uploader) {
+            $obj = new $uploader;
+            $objectsMap[$obj->getMethodName()] = $obj;
+        }
+
+        $this->uploaders = $objectsMap;
+    }
+
+    /**
+     * Add custom uploader
+     * @param $class Class path to uploader
+     */
+    public function addUploader($class)
+    {
+        $obj = new $class;
+        $this->uploaders[$obj->getMethodName()] = $obj;
+    }
 
     /**
      * Upload sitemap file and save into folder
@@ -16,25 +51,16 @@ class Importer
      * @return bool
      * @throws Exception
      */
-    public function uploadFile($name = 'file', $targetDir = __DIR__ . '/uploads')
+    public function uploadFile($method, $name = 'file', $targetDir = __DIR__ . '/uploads')
     {
-        if ( ! array_key_exists($name, $_FILES)) {
+        if ( ! array_key_exists($method, $this->uploaders)) {
+            throw new Exception('Upload method not exists!');
+        }
+
+        $targetFile = $this->uploaders[$method]->loadFile($name, $targetDir);
+
+        if ($targetFile === false) {
             return false;
-        }
-
-        if ( ! in_array($_FILES[$name]['type'], ['application/xml', 'text/xml'])) {
-            throw new Exception('File type error. Only XML files available.');
-        }
-
-        $sourceFile = $_FILES[$name]['tmp_name'];
-        $targetFile = $targetDir . '/' . md5(time().$sourceFile) . '.xml';
-
-        if ( ! file_exists($targetDir)) {
-            mkdir($targetDir, 0755, true);
-        }
-
-        if ( ! @move_uploaded_file($sourceFile, $targetFile)) {
-            throw new Exception('File saving error. ');
         }
 
         $this->filePath = $targetFile;
